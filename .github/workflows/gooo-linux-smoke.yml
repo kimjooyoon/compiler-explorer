@@ -1,0 +1,44 @@
+name: Gooo Linux source-output smoke (fork only)
+
+on:
+  push:
+    branches: [test/gooo-linux-smoke-839-r3]
+
+permissions:
+  contents: read
+
+jobs:
+  linux-smoke:
+    if: github.repository == 'kimjooyoon/compiler-explorer' && github.ref == 'refs/heads/test/gooo-linux-smoke-839-r3'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    env:
+      SMOKE_DIR: /tmp/ce9258-linux-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.23.1
+          check-latest: false
+      - name: Prepare pinned dependencies and verified release
+        run: python3 ci-gooo-linux-smoke/run.py prepare --source "$GITHUB_WORKSPACE" --work "$SMOKE_DIR" --node "$(command -v node)"
+      - name: Real CLI and headless app.ts HTTP, isolated loopback
+        run: |
+          sudo -n /usr/bin/python3 "$GITHUB_WORKSPACE/ci-gooo-linux-smoke/run.py" launch \
+            --source "$GITHUB_WORKSPACE" --work "$SMOKE_DIR" --node "$(command -v node)" \
+            --uid "$(id -u)" --gid "$(id -g)"
+      - name: Check and freeze small artifact allowlist
+        id: freeze
+        if: always()
+        run: python3 ci-gooo-linux-smoke/run.py artifact --source "$GITHUB_WORKSPACE" --work "$SMOKE_DIR" --node "$(command -v node)"
+      - uses: actions/upload-artifact@v7
+        if: always() && steps.freeze.outputs.artifact_ready == 'true'
+        with:
+          name: gooo-linux-source-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.freeze.outputs.artifact_path }}
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
